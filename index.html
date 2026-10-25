@@ -53,6 +53,7 @@
 <div id="start">
   <h1>Le macchinine di Lolo</h1>
   <p>Scegli la tua macchina!</p>
+  <p class="age" style="font-size:clamp(16px,2.3vw,24px);opacity:.75;margin:.3em 0 .7em">👶 3–4 anni · 🐢 da 2,5 anni</p>
   <div class="picks">
     <button class="pick" data-car="pompieri" aria-label="Camion dei pompieri"><canvas width="240" height="200"></canvas>Pompieri</button>
     <button class="pick" data-car="polizia" aria-label="Macchina della polizia"><canvas width="240" height="200"></canvas>Polizia</button>
@@ -1003,11 +1004,13 @@ cv.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (!started) return;
   initAudio();
-  activePointer = e.pointerId;
+  activePointer = e.pointerId; tapOk = false;
   // un animaletto dello sfondo? fa il verso e saltella (non è un ostacolo)
   const an = animalAt(e.clientX, e.clientY);
   if (an) { an.hop = 1; animalSound(an.A, 1); burst(an.x, an.y - (an.ground ? an.s * .55 : 0), 8, RAINBOW, 140, 100); return; }
   if (state === 'finish') { if (finishCard && finishCard.t > 1.2) nextTrack(); return; }
+  if (speedKey === 'lento' && (state === 'drive' || state === 'stopped')) { tapLane(e.clientX, e.clientY); return; } // 🐢: tocca il lato dello schermo → la macchina va lì
+  tapX = e.clientX; tapY = e.clientY; tapOk = true;
   if (state === 'aim' && e.clientY > H * .3) { // tira giù per partire
     pulling = true; pullY0 = e.clientY; pull = 0;
     // forza piena = lo spazio che c'è davvero fino al bordo in basso (così si arriva sempre a 5 palline)
@@ -1023,11 +1026,22 @@ cv.addEventListener('pointermove', e => {
 const endPointer = e => {
   if (e.pointerId !== activePointer) return;
   activePointer = null;
+  const wasPull = pulling && pull >= .15;
   if (pulling) {
     pulling = false;
     if (pull >= .15 && state === 'aim') launch(); else pull = 0;
   }
+  if (tapOk && !wasPull && speedKey === 'lento' && state === 'aim') tapLane(tapX, tapY); // 🐢: un tocco senza tirare sceglie la corsia anche prima di partire
 };
+// 🐢 (senza frecce): lo schermo è diviso in 3 → sinistra / centro / destra; la macchina va SUBITO in quella corsia
+let tapX = 0, tapY = 0, tapOk = false;
+function tapLane(x, y) {
+  if (!started || state === 'finish' || state === 'rewind') return;
+  const nl = x < W / 3 ? 0 : x < W * 2 / 3 ? 1 : 2;
+  burst(x, y, 6, RAINBOW, 90, 60); // un piccolo segno dove ha toccato
+  if (nl === lane) { tone(220, 200, .08, 'triangle', .08); return; } // già lì: piccolo "toc"
+  tone(nl < lane ? 660 : 880, nl < lane ? 880 : 660, .1, 'sine', .1); lane = nl;
+}
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('contextmenu', e => e.preventDefault());
@@ -1049,7 +1063,7 @@ window.addEventListener('keydown', e => { // per giocare anche dal PC
   if (e.key === 'ArrowLeft') changeLane(-1);
   if (e.key === 'ArrowRight') changeLane(1);
 });
-function showLaneButtons(on) { for (const id of ['btnLeft', 'btnRight']) document.getElementById(id).classList.toggle('hide', !on); }
+function showLaneButtons(on) { for (const id of ['btnLeft', 'btnRight']) document.getElementById(id).classList.toggle('hide', !on || speedKey === 'lento'); } // 🐢: niente frecce, si tocca la corsia
 
 function launch() {
   gotAtLaunch = got; gotThisThrow = 0; // la forza di questo tiro = premi presi fino ad ora (+ allenamento)
@@ -2271,7 +2285,7 @@ btnMute.addEventListener('click', () => {
 });
 const btnSpeed = document.getElementById('btnSpeed');
 function showSpeed() { btnSpeed.textContent = SPD().icon; btnSpeed.setAttribute('aria-label', SPD().label + ' (tocca per cambiare)'); btnSpeed.title = SPD().label; }
-btnSpeed.addEventListener('click', () => { speedKey = SPEED_ORDER[(SPEED_ORDER.indexOf(speedKey) + 1) % SPEED_ORDER.length]; try { localStorage.setItem('lolo-speed', speedKey); } catch (e) {} showSpeed(); });
+btnSpeed.addEventListener('click', () => { speedKey = SPEED_ORDER[(SPEED_ORDER.indexOf(speedKey) + 1) % SPEED_ORDER.length]; try { localStorage.setItem('lolo-speed', speedKey); } catch (e) {} showSpeed(); showLaneButtons(started); });
 showSpeed();
 
 // schermo intero: lo stesso bottone entra ed esce
